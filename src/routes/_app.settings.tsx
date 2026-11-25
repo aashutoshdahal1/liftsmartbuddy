@@ -268,7 +268,7 @@ function SettingsPage() {
             </div>
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" defaultValue={authUser?.email ?? ""} className="mt-2 h-11 rounded-2xl bg-elevated" />
+              <Input id="email" defaultValue={authUser?.email ?? ""} disabled className="mt-2 h-11 rounded-2xl bg-elevated opacity-60 cursor-not-allowed" />
             </div>
           </div>
           <Button className="mt-5 rounded-2xl" onClick={() => toast.success("Profile saved")}>
