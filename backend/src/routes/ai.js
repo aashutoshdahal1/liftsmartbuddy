@@ -26,6 +26,10 @@ Rules:
 - Always ground advice in the user's actual data when available.`;
 }
 
+function userApiKey(req) {
+  return req.headers["x-groq-key"] || undefined;
+}
+
 // POST /api/ai/chat  — freeform AI coach chat
 router.post("/chat", protect, async (req, res) => {
   try {
@@ -57,7 +61,7 @@ router.post("/chat", protect, async (req, res) => {
 
     const reply = await chatCompletion(
       [{ role: "system", content: systemPrompt }, ...messages],
-      { maxTokens: 512 }
+      { maxTokens: 512, apiKey: userApiKey(req) }
     );
 
     res.json({ reply });
@@ -94,7 +98,7 @@ router.post("/suggestions", protect, async (req, res) => {
     const reply = await chatCompletion([
       { role: "system", content: systemPrompt },
       { role: "user", content: prompt + "\n\nReturn a JSON array of 3 objects: [{title, body, tag}] where tag is one of: 'nutrition', 'training', 'recovery', 'progress'. Reply ONLY with valid JSON, no markdown." },
-    ], { temperature: 0.6, maxTokens: 512 });
+    ], { temperature: 0.6, maxTokens: 512, apiKey: userApiKey(req) });
 
     let suggestions;
     try {
@@ -108,6 +112,103 @@ router.post("/suggestions", protect, async (req, res) => {
     res.json({ suggestions });
   } catch (err) {
     console.error("[ai/suggestions]", err.message);
+    res.status(500).json({ message: "AI service error" });
+  }
+});
+
+// POST /api/ai/weekly-review  — 7-day nutrition review + next-week calorie/macro adjustment
+router.post("/weekly-review", protect, async (req, res) => {
+  try {
+    const today = new Date();
+    const dates = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      return d.toISOString().slice(0, 10);
+    });
+
+    const [logs, weights] = await Promise.all([
+      NutritionLog.find({ user: req.user._id, date: { $in: dates } }),
+      WeightEntry.find({ user: req.user._id }).sort({ date: -1 }).limit(14),
+    ]);
+
+    // Compute per-day totals (skip days with no log)
+    const dailyTotals = logs.map((log) => {
+      const c = log.consumed;
+      return { date: log.date, calories: c.calories, protein: c.protein, carbs: c.carbs, fat: c.fat };
+    });
+
+    const daysLogged = dailyTotals.length;
+    if (daysLogged < 2) {
+      return res.json({
+        review: null,
+        reason: "not_enough_data",
+        message: "Log at least 2 days of food to get a weekly review.",
+      });
+    }
+
+    const avgCal = Math.round(dailyTotals.reduce((s, d) => s + d.calories, 0) / daysLogged);
+    const avgProtein = Math.round(dailyTotals.reduce((s, d) => s + d.protein, 0) / daysLogged);
+    const avgCarbs = Math.round(dailyTotals.reduce((s, d) => s + d.carbs, 0) / daysLogged);
+    const avgFat = Math.round(dailyTotals.reduce((s, d) => s + d.fat, 0) / daysLogged);
+
+    // Compute TDEE from profile (Mifflin-St Jeor BMR × activity multiplier)
+    const u = req.user;
+    const bmr = u.gender === "female"
+      ? 10 * u.weightKg + 6.25 * u.heightCm - 5 * u.age - 161
+      : 10 * u.weightKg + 6.25 * u.heightCm - 5 * u.age + 5;
+    const activityMultipliers = { sedentary: 1.2, light: 1.375, moderate: 1.55, high: 1.725, athlete: 1.9 };
+    const tdee = Math.round(bmr * (activityMultipliers[u.activityLevel] ?? 1.55));
+    const goalAdjust = { "lean-bulk": 200, bulk: 400, cut: -400, "lose-weight": -500, maintenance: 0 };
+    const targetCal = tdee + (goalAdjust[u.goal] ?? 0);
+
+    // Weight trend over the logged window
+    const weekWeights = weights.filter((w) => dates.includes(w.date)).sort((a, b) => a.date.localeCompare(b.date));
+    const earliestWeight = weekWeights[0] ?? weights[weights.length - 1];
+    const latestWeight = weekWeights[weekWeights.length - 1] ?? weights[0];
+    const weightDeltaKg = earliestWeight && latestWeight
+      ? parseFloat((latestWeight.kg - earliestWeight.kg).toFixed(2))
+      : null;
+
+    const weightStr = weights.length
+      ? weights.map((w) => `${w.date}: ${w.kg}kg`).join(", ")
+      : "no weight data";
+
+    const weightTrendSummary = weightDeltaKg !== null
+      ? `${weightDeltaKg >= 0 ? "+" : ""}${weightDeltaKg}kg (${earliestWeight.kg}→${latestWeight.kg}kg)`
+      : "no data";
+
+    const calDiff = avgCal - targetCal;
+
+    const prompt = `Weekly nutrition review. Goal:${u.goal}. Target:${targetCal}kcal(TDEE${tdee}). Avg:${avgCal}kcal(${calDiff>0?"+":""}${calDiff}),P${avgProtein}g,C${avgCarbs}g,F${avgFat}g. Days:${daysLogged}/7. Weight:${weightTrendSummary}.
+Reply ONLY with this JSON (strings max 12 words each, foodChanges exactly 2 items):
+{"weekSummary":"...","adjustment":{"direction":"increase|decrease|maintain","targetCalories":0,"deltaCalories":0,"reason":"..."},"macroTargets":{"protein":0,"carbs":0,"fat":0},"foodChanges":[{"action":"add","food":"...","detail":"..."},{"action":"increase","food":"...","detail":"..."}],"focusNextDays":"..."}`;
+
+    const reply = await chatCompletion([
+      { role: "system", content: `You are a concise fitness coach. Reply ONLY with valid JSON, no markdown.` },
+      { role: "user", content: prompt },
+    ], { temperature: 0.4, maxTokens: 1024, apiKey: userApiKey(req) });
+
+    let review;
+    try {
+      review = JSON.parse(reply);
+    } catch {
+      const match = reply.match(/\{[\s\S]*\}/);
+      try {
+        review = match ? JSON.parse(match[0]) : null;
+      } catch (e) {
+        console.error("[ai/weekly-review] parse fail, raw reply:", reply.slice(0, 500));
+        review = null;
+      }
+    }
+
+    if (!review) return res.status(500).json({ message: "Could not parse weekly review" });
+
+    res.json({
+      review,
+      stats: { avgCal, avgProtein, avgCarbs, avgFat, daysLogged, targetCal, tdee, weightDeltaKg },
+    });
+  } catch (err) {
+    console.error("[ai/weekly-review]", err.message);
     res.status(500).json({ message: "AI service error" });
   }
 });
@@ -135,7 +236,7 @@ No markdown, no explanation.`;
 
     const reply = await chatCompletion([
       { role: "user", content: prompt },
-    ], { temperature: 0.5, maxTokens: 768 });
+    ], { temperature: 0.5, maxTokens: 768, apiKey: userApiKey(req) });
 
     let plan;
     try {
@@ -176,7 +277,7 @@ Return ONLY valid JSON:
 
     const reply = await chatCompletion([
       { role: "user", content: prompt },
-    ], { temperature: 0.6, maxTokens: 1024 });
+    ], { temperature: 0.6, maxTokens: 1024, apiKey: userApiKey(req) });
 
     let mealPlan;
     try {

@@ -1,13 +1,14 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronLeft, Minus, Plus, Search, X } from "lucide-react";
+import { Check, ChevronLeft, Minus, Plus, Search, Sparkles, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { FOOD_DB } from "@/lib/food-database";
 import { favoriteMeals, type FoodItem, type Meal } from "@/lib/mock-data";
 import { useAppDispatch } from "@/store";
 import { addFood } from "@/store/nutritionSlice";
-import { nutritionApi } from "@/lib/api";
+import { nutritionApi, aiApi } from "@/lib/api";
 
 const MEAL_SLOTS: { slot: Meal["slot"]; emoji: string; time: string }[] = [
   { slot: "Breakfast", emoji: "🌅", time: "7–10 AM" },
@@ -31,6 +32,8 @@ function FoodRow({
   onAdd: (scaled: FoodItem) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [isCheat, setIsCheat] = useState(false);
+  const [cheatName, setCheatName] = useState("");
   // Determine base unit (g vs servings)
   const isGrams = /\d+\s*g\b/.test(item.serving);
   const baseGrams = isGrams ? parseFloat(item.serving) || 100 : null;
@@ -46,6 +49,8 @@ function FoodRow({
     protein:  Math.round(item.protein  * factor * 10) / 10,
     carbs:    Math.round(item.carbs    * factor * 10) / 10,
     fat:      Math.round(item.fat      * factor * 10) / 10,
+    ...(isCheat ? { isCheatMeal: true as const } : {}),
+    ...(isCheat && cheatName.trim() ? { cheatMealName: cheatName.trim() } : {}),
   };
 
   function adjust(delta: number) {
@@ -130,13 +135,33 @@ function FoodRow({
                 ))}
               </div>
 
+              {/* Cheat meal toggle */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold text-muted-foreground">🍕 Cheat meal?</span>
+                  <Switch checked={isCheat} onCheckedChange={setIsCheat} aria-label="Mark as cheat meal" />
+                </div>
+                {isCheat && (
+                  <Input
+                    value={cheatName}
+                    onChange={(e) => setCheatName(e.target.value)}
+                    placeholder="e.g. Domino's pizza (optional)"
+                    className="h-9 rounded-xl bg-muted text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                )}
+              </div>
+
               {/* Confirm button */}
               <button
                 onClick={() => onAdd(scaled)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+                className={`flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-opacity hover:opacity-90 ${
+                  isCheat
+                    ? "bg-orange-500 text-white"
+                    : "bg-primary text-primary-foreground"
+                }`}
               >
                 <Check className="size-4" />
-                Add {scaled.calories} kcal
+                {isCheat ? "🍕 Add cheat meal" : `Add ${scaled.calories} kcal`}
               </button>
             </div>
           </motion.div>
@@ -168,6 +193,7 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
   const dispatch = useAppDispatch();
 
   const [selectedSlot, setSelectedSlot] = useState<Meal["slot"] | null>(initialSlot);
+  const [isCheatFlow, setIsCheatFlow] = useState(false);
   const [tab, setTab] = useState<"search" | "favourites" | "custom">("search");
   const [query, setQuery] = useState("");
 
@@ -176,6 +202,10 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
   const [customProtein, setCustomProtein] = useState("");
   const [customCarbs, setCustomCarbs] = useState("");
   const [customFat, setCustomFat] = useState("");
+  const [customIsCheat, setCustomIsCheat] = useState(false);
+  const [customCheatName, setCustomCheatName] = useState("");
+  const [estimating, setEstimating] = useState(false);
+  const [estimateError, setEstimateError] = useState("");
 
   const slot = selectedSlot ?? initialSlot;
 
@@ -190,16 +220,46 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
   // Reset state when sheet opens/closes
   useMemo(() => {
     setSelectedSlot(initialSlot);
+    setIsCheatFlow(false);
     setQuery("");
     setTab("search");
+    setCustomName(""); setCustomCal(""); setCustomProtein(""); setCustomCarbs(""); setCustomFat("");
+    setCustomIsCheat(false); setCustomCheatName("");
   }, [initialSlot, open]);
 
+  async function estimateMacros() {
+    if (!customName.trim()) return;
+    setEstimating(true);
+    setEstimateError("");
+    try {
+      const { reply } = await aiApi.chat([{
+        role: "user",
+        content: `Estimate the nutritional values for: "${customName.trim()}". Assume a typical single serving/portion.
+Reply ONLY with valid JSON, no markdown, no explanation:
+{"calories": number, "protein": number, "carbs": number, "fat": number}`,
+      }]);
+      // Extract JSON even if model wraps it in markdown
+      const match = reply.match(/\{[\s\S]*?\}/);
+      if (!match) throw new Error("No JSON in response");
+      const macros = JSON.parse(match[0]) as { calories: number; protein: number; carbs: number; fat: number };
+      if (typeof macros.calories !== "number") throw new Error("Invalid response");
+      setCustomCal(String(Math.round(macros.calories)));
+      setCustomProtein(String(Math.round(macros.protein)));
+      setCustomCarbs(String(Math.round(macros.carbs)));
+      setCustomFat(String(Math.round(macros.fat)));
+    } catch {
+      setEstimateError("Couldn't estimate — check your AI key in Settings or try again.");
+    } finally {
+      setEstimating(false);
+    }
+  }
+
   function doAdd(item: FoodItem) {
-    if (!slot) return;
-    dispatch(addFood({ slot, item }));
+    // Cheat meals go into Snack slot (backend only accepts the 4 fixed slots)
+    const targetSlot: Meal["slot"] = isCheatFlow ? "Snack" : (slot ?? "Snack");
+    dispatch(addFood({ slot: targetSlot, item }));
     onClose();
-    // Persist to backend — fire and forget
-    nutritionApi.addFood(slot, item).catch(() => {});
+    nutritionApi.addFood(targetSlot, item).catch(() => {});
   }
 
   function addCustom() {
@@ -212,6 +272,8 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
       protein:  parseFloat(customProtein) || 0,
       carbs:    parseFloat(customCarbs) || 0,
       fat:      parseFloat(customFat) || 0,
+      ...(customIsCheat ? { isCheatMeal: true as const } : {}),
+      ...(customIsCheat && customCheatName.trim() ? { cheatMealName: customCheatName.trim() } : {}),
     });
   }
 
@@ -235,20 +297,20 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
 
             {/* Header */}
             <div className="flex shrink-0 items-center gap-3 border-b border-border/60 px-5 py-4">
-              {!initialSlot && selectedSlot && (
+              {(!initialSlot && selectedSlot) || isCheatFlow ? (
                 <button
-                  onClick={() => setSelectedSlot(null)}
+                  onClick={() => { setSelectedSlot(null); setIsCheatFlow(false); setCustomIsCheat(false); }}
                   className="grid size-8 place-items-center rounded-2xl bg-elevated text-muted-foreground"
                 >
                   <ChevronLeft className="size-4" />
                 </button>
-              )}
+              ) : null}
               <div className="flex-1 min-w-0">
                 <p className="font-display text-base font-bold">
-                  {selectedSlot ? `Add to ${selectedSlot}` : "Add Meal"}
+                  {isCheatFlow ? "🍕 Log Cheat Meal" : selectedSlot ? `Add to ${selectedSlot}` : "Add Meal"}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {selectedSlot ? "Tap a food to set quantity" : "Select meal type first"}
+                  {isCheatFlow ? "Won't affect your weekly trend" : selectedSlot ? "Tap a food to set quantity" : "Select meal type first"}
                 </p>
               </div>
               <button
@@ -260,8 +322,8 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
             </div>
 
             {/* Step 1 — slot picker */}
-            {!selectedSlot ? (
-              <div className="p-5 space-y-3">
+            {!selectedSlot && !isCheatFlow ? (
+              <div className="p-5 space-y-3 overflow-y-auto">
                 <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">Which meal?</p>
                 {MEAL_SLOTS.map((m) => (
                   <button
@@ -277,6 +339,100 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
                     <Plus className="ml-auto size-4 text-muted-foreground" />
                   </button>
                 ))}
+                {/* Cheat meal option */}
+                <button
+                  onClick={() => { setIsCheatFlow(true); setCustomIsCheat(true); }}
+                  className="flex w-full items-center gap-4 rounded-3xl border border-orange-500/40 bg-orange-500/8 px-5 py-4 text-left transition-colors hover:border-orange-500/70 hover:bg-orange-500/12"
+                >
+                  <span className="text-2xl">🍕</span>
+                  <div>
+                    <p className="font-semibold text-sm text-orange-500">Cheat Meal</p>
+                    <p className="text-xs text-muted-foreground">Won't affect your weekly trend</p>
+                  </div>
+                  <Plus className="ml-auto size-4 text-orange-400" />
+                </button>
+              </div>
+            ) : isCheatFlow ? (
+              /* Cheat meal form */
+              <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+                <div className="rounded-2xl border border-orange-500/30 bg-orange-500/8 px-4 py-3">
+                  <p className="text-xs font-semibold text-orange-500">🍕 Cheat meal — excluded from weekly trend analysis</p>
+                </div>
+                <div>
+                  <Label htmlFor="cheat-name">What did you eat? *</Label>
+                  <Input
+                    id="cheat-name"
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    placeholder="e.g. Domino's Pepperoni Pizza"
+                    className="mt-1.5 h-11 rounded-2xl bg-elevated focus-visible:ring-0 focus-visible:ring-offset-0"
+                    autoFocus
+                  />
+                </div>
+                {/* AI macro estimate */}
+                <button
+                  type="button"
+                  onClick={estimateMacros}
+                  disabled={!customName.trim() || estimating}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/8 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
+                >
+                  <Sparkles className={`size-4 ${estimating ? "animate-pulse" : ""}`} />
+                  {estimating ? "Estimating…" : "Estimate macros with AI"}
+                </button>
+                {estimateError && (
+                  <p className="text-[11px] text-destructive">{estimateError}</p>
+                )}
+
+                <div>
+                  <Label htmlFor="cheat-cal">Calories (kcal) *</Label>
+                  <Input
+                    id="cheat-cal"
+                    type="number" inputMode="decimal"
+                    value={customCal}
+                    onChange={(e) => setCustomCal(e.target.value)}
+                    placeholder="e.g. 850"
+                    className="mt-1.5 h-11 rounded-2xl bg-elevated text-center focus-visible:ring-0 focus-visible:ring-offset-0"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { id: "cheat-p", label: "Protein (g)", val: customProtein, set: setCustomProtein },
+                    { id: "cheat-c", label: "Carbs (g)",   val: customCarbs,   set: setCustomCarbs   },
+                    { id: "cheat-f", label: "Fat (g)",     val: customFat,     set: setCustomFat     },
+                  ].map((f) => (
+                    <div key={f.id}>
+                      <Label htmlFor={f.id}>{f.label}</Label>
+                      <Input
+                        id={f.id} type="number" inputMode="decimal"
+                        value={f.val} onChange={(e) => f.set(e.target.value)}
+                        placeholder="0"
+                        className="mt-1.5 h-11 rounded-2xl bg-elevated text-center focus-visible:ring-0 focus-visible:ring-offset-0"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground">Macros are optional — just name and calories is enough.</p>
+                <button
+                  onClick={() => {
+                    if (!customName.trim() || !customCal) return;
+                    doAdd({
+                      id: `cheat-${Date.now()}`,
+                      name: customName.trim(),
+                      serving: "1 serving",
+                      calories: parseFloat(customCal) || 0,
+                      protein:  parseFloat(customProtein) || 0,
+                      carbs:    parseFloat(customCarbs) || 0,
+                      fat:      parseFloat(customFat) || 0,
+                      isCheatMeal: true,
+                      cheatMealName: customName.trim(),
+                    });
+                  }}
+                  disabled={!customName.trim() || !customCal}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-orange-500 py-3 text-sm font-semibold text-white disabled:opacity-40 hover:opacity-90 transition-opacity"
+                >
+                  <Check className="size-4" />
+                  Log Cheat Meal
+                </button>
               </div>
             ) : (
               /* Step 2 — food picker */
@@ -334,6 +490,18 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
                           className="mt-1.5 h-11 rounded-2xl bg-elevated focus-visible:ring-0 focus-visible:ring-offset-0"
                         />
                       </div>
+                      <button
+                        type="button"
+                        onClick={estimateMacros}
+                        disabled={!customName.trim() || estimating}
+                        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/8 py-2.5 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
+                      >
+                        <Sparkles className={`size-4 ${estimating ? "animate-pulse" : ""}`} />
+                        {estimating ? "Estimating…" : "Estimate macros with AI"}
+                      </button>
+                      {estimateError && (
+                        <p className="text-[11px] text-destructive">{estimateError}</p>
+                      )}
                       <div className="grid grid-cols-2 gap-3">
                         {[
                           { id: "cf-cal",     label: "Calories (kcal) *", val: customCal,     set: setCustomCal },
@@ -352,12 +520,30 @@ export function FoodSearchSheet({ open, slot: initialSlot, onClose }: Props) {
                           </div>
                         ))}
                       </div>
+                      {/* Cheat meal toggle for custom */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-xs font-semibold text-muted-foreground">🍕 Cheat meal?</span>
+                          <Switch checked={customIsCheat} onCheckedChange={setCustomIsCheat} aria-label="Mark as cheat meal" />
+                        </div>
+                        {customIsCheat && (
+                          <Input
+                            value={customCheatName}
+                            onChange={(e) => setCustomCheatName(e.target.value)}
+                            placeholder="e.g. Domino's pizza (optional)"
+                            className="h-9 rounded-xl bg-muted text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                          />
+                        )}
+                      </div>
                       <button
                         onClick={addCustom}
                         disabled={!customName.trim() || !customCal}
-                        className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-40 hover:opacity-90 transition-opacity"
+                        className={`flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity ${
+                          customIsCheat ? "bg-orange-500 text-white" : "bg-primary text-primary-foreground"
+                        }`}
                       >
-                        <Plus className="size-4" /> Add Custom Food
+                        <Plus className="size-4" />
+                        {customIsCheat ? "🍕 Add cheat meal" : "Add Custom Food"}
                       </button>
                     </div>
                   )}

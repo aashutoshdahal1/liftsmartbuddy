@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { ArrowUp, Bot, Sparkles } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppSelector } from "@/store";
@@ -43,8 +44,11 @@ export function ChatWindow() {
     const weekDelta = latestWeight && prevWeight ? (latestWeight.kg - prevWeight.kg).toFixed(1) : null;
     const lastWorkout = workoutHistory[0];
 
+    const hour = new Date().getHours();
+    const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : hour < 21 ? "evening" : "night";
+
     // Build a rich greeting prompt so Groq replies with real context
-    const greetingPrompt = `Generate a short (2-3 sentence) personalised morning greeting for ${firstName}.
+    const greetingPrompt = `Generate a short (2-3 sentence) personalised ${timeOfDay} greeting for ${firstName}. Use "Good ${timeOfDay}" as the opening — do NOT say "morning" if it is not morning.
 Facts:
 - Streak: ${streak} day${streak !== 1 ? "s" : ""}
 - Weight trend: ${weekDelta !== null ? `${Number(weekDelta) >= 0 ? "+" : ""}${weekDelta} kg this week` : "no weight data yet"}
@@ -120,7 +124,30 @@ Keep it motivating and specific. End with a question about what they want help w
                   : "bg-elevated text-foreground"
               }`}
             >
-              {m.text}
+              {m.role === "assistant" ? (
+                <ReactMarkdown
+                  components={{
+                    p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                    ul: ({ children }) => <ul className="mb-2 list-disc pl-4 space-y-1">{children}</ul>,
+                    ol: ({ children }) => <ol className="mb-2 list-decimal pl-4 space-y-1">{children}</ol>,
+                    li: ({ children }) => <li>{children}</li>,
+                    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                    table: ({ children }) => (
+                      <div className="overflow-x-auto my-2">
+                        <table className="w-full text-xs border-collapse">{children}</table>
+                      </div>
+                    ),
+                    thead: ({ children }) => <thead className="border-b border-border">{children}</thead>,
+                    th: ({ children }) => <th className="px-2 py-1 text-left font-semibold text-muted-foreground">{children}</th>,
+                    td: ({ children }) => <td className="px-2 py-1 border-b border-border/50">{children}</td>,
+                    code: ({ children }) => <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{children}</code>,
+                  }}
+                >
+                  {m.text}
+                </ReactMarkdown>
+              ) : (
+                m.text
+              )}
             </div>
           </motion.div>
         ))}

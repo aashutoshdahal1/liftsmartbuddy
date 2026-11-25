@@ -133,8 +133,53 @@ function RootShell({ children }: { children: ReactNode }) {
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <HeadContent />
+        <style dangerouslySetInnerHTML={{ __html: `
+          #ls-splash {
+            position: fixed; inset: 0; z-index: 9999;
+            background: oklch(0.16 0.012 260);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 20px;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+          }
+          #ls-splash.ls-hidden { opacity: 0; visibility: hidden; }
+          .ls-logo {
+            width: 72px; height: 72px; border-radius: 22px;
+            background: linear-gradient(135deg, oklch(0.75 0.17 158) 0%, oklch(0.86 0.16 165) 100%);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 0 40px oklch(0.75 0.17 158 / 0.35);
+          }
+          .ls-logo svg { width: 36px; height: 36px; fill: oklch(0.17 0.03 165); }
+          .ls-name {
+            font-family: 'Sora', 'Plus Jakarta Sans', system-ui, sans-serif;
+            font-size: 22px; font-weight: 700; letter-spacing: -0.02em;
+            color: oklch(0.97 0.004 250);
+          }
+          .ls-bar-track {
+            width: 120px; height: 3px; border-radius: 999px;
+            background: oklch(0.97 0.004 250 / 0.1); overflow: hidden;
+          }
+          .ls-bar {
+            height: 100%; border-radius: 999px;
+            background: linear-gradient(90deg, oklch(0.75 0.17 158), oklch(0.86 0.16 165));
+            animation: ls-load 1.6s ease-in-out infinite;
+          }
+          @keyframes ls-load {
+            0%   { width: 0%;   margin-left: 0%; }
+            50%  { width: 60%;  margin-left: 20%; }
+            100% { width: 0%;   margin-left: 100%; }
+          }
+        `}} />
       </head>
       <body>
+        <div id="ls-splash" aria-hidden="true">
+          <div className="ls-logo">
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path d="M6.5 5.5A1 1 0 0 1 7.5 4.5h1A1 1 0 0 1 9.5 5.5v13a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-13ZM14.5 5.5A1 1 0 0 1 15.5 4.5h1a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-13ZM3 10.5A1 1 0 0 1 4 9.5h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-3ZM18 10.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-3ZM9.5 11.5h5v1h-5v-1Z"/>
+            </svg>
+          </div>
+          <div className="ls-name">LiftSmart</div>
+          <div className="ls-bar-track"><div className="ls-bar"></div></div>
+        </div>
         {children}
         <Scripts />
       </body>
@@ -144,6 +189,26 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    // Give the app one frame to paint, then fade out the splash
+    const raf = requestAnimationFrame(() => {
+      const splash = document.getElementById("ls-splash");
+      if (splash) {
+        splash.classList.add("ls-hidden");
+        splash.addEventListener("transitionend", () => splash.remove(), { once: true });
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch((err) =>
+        console.warn("[sw] registration failed", err)
+      );
+    }
+  }, []);
 
   return (
     <ReduxProvider store={store}>

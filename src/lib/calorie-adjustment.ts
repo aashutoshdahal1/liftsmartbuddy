@@ -83,9 +83,7 @@ export function computeAdjustment(
         delta: -200,
         direction: "decrease",
         reason: `Losing ${Math.abs(rate).toFixed(2)} kg/week — target is ${Math.abs(range.max)}–${Math.abs(range.min)} kg/week.`,
-        action: usingFallback
-          ? "Reduce by 200 kcal. Skip 1 snack or swap rice for vegetables."
-          : "Reduce by 200 kcal. Skip 1 snack or swap rice for vegetables.",
+        action: "Reduce by ~200 kcal: drop rice portion from ~200g to 125g, or skip the evening snack.",
         weeklyRateKg: rate,
         usingFallback,
       };
@@ -96,9 +94,7 @@ export function computeAdjustment(
       delta: 200,
       direction: "increase",
       reason: `Gaining ${rate.toFixed(2)} kg/week — below target ${range.min}–${range.max} kg/week.`,
-      action: usingFallback
-        ? "Add 200 kcal today. Try an extra snack or bigger portions."
-        : "Add 200 kcal. Try an extra snack or bigger portions.",
+      action: "Add ~200 kcal: an extra 75g cooked rice + 100g chicken breast covers it.",
       weeklyRateKg: rate,
       usingFallback,
     };
@@ -111,10 +107,8 @@ export function computeAdjustment(
       adjustedTarget: baseTarget + 200,
       delta: 200,
       direction: "increase",
-      reason: `Losing ${Math.abs(rate).toFixed(2)} kg/week — too fast, risk muscle loss.`,
-      action: usingFallback
-        ? "Eat 200 kcal more today. Add a protein snack or extra carbs."
-        : "Eat 200 kcal more. Add a protein snack or extra carbs.",
+      reason: `Losing ${Math.abs(rate).toFixed(2)} kg/week — too fast, risks muscle loss.`,
+      action: "Eat 200 kcal more: add 200g Greek yogurt + a banana (~280 kcal, 22g protein).",
       weeklyRateKg: rate,
       usingFallback,
     };
@@ -124,10 +118,8 @@ export function computeAdjustment(
     adjustedTarget: baseTarget - 200,
     delta: -200,
     direction: "decrease",
-    reason: `Gaining ${rate.toFixed(2)} kg/week — above target, may be gaining excess fat.`,
-    action: usingFallback
-      ? "Reduce by 200 kcal today. Cut 1 tbsp oil or smaller rice portion."
-      : "Reduce by 200 kcal. Cut 1 tbsp oil or smaller rice portion.",
+    reason: `Gaining ${rate.toFixed(2)} kg/week — above target, may be adding excess fat.`,
+    action: "Reduce by ~200 kcal: cut rice portion from 300g to 175g or remove 1 tbsp oil from cooking.",
     weeklyRateKg: rate,
     usingFallback,
   };

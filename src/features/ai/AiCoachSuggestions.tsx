@@ -235,20 +235,20 @@ export function AiCoachSuggestions() {
       body: foodBody,
     },
     {
-      icon: TrendingUp,
-      iconColor: "text-blue-500",
-      iconBg: "bg-blue-500/12",
-      label: "Weight trend",
-      title: isGaining ? "On track" : "Increase daily intake",
-      body: weightBody,
-    },
-    {
       icon: Zap,
       iconColor: "text-violet-500",
       iconBg: "bg-violet-500/12",
       label: "Exercise progression",
       title: lastWorkout ? `Next: ${lastWorkout.title}` : "Start your first workout",
       body: progressionBody,
+    },
+    {
+      icon: TrendingUp,
+      iconColor: "text-blue-500",
+      iconBg: "bg-blue-500/12",
+      label: "Weight trend",
+      title: isGaining ? "On track" : "Increase daily intake",
+      body: weightBody,
     },
   ];
 

@@ -6,6 +6,8 @@ const { connectDB } = require("./lib/db");
 const app = express();
 
 const ALLOWED_ORIGINS = [
+  "https://liftsmartbuddy.com",
+  "https://www.liftsmartbuddy.com",
   "https://liftsmart.aashutoshcloud.live",
   "http://localhost:5173",
   "http://localhost:3000",
@@ -34,6 +36,7 @@ app.use("/api/workouts", require("./routes/workouts"));
 app.use("/api/routines", require("./routes/routines"));
 app.use("/api/measurements", require("./routes/measurements"));
 app.use("/api/ai", require("./routes/ai"));
+app.use("/api/push", require("./routes/push").router);
 
 app.get("/api/health", (_, res) => res.json({ status: "ok" }));
 
@@ -41,6 +44,7 @@ const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
   app.listen(PORT, () => console.log(`LiftSmart API running on port ${PORT}`));
+  require("./lib/notificationScheduler").startScheduler();
 }).catch((err) => {
   console.error("DB connection failed:", err.message);
   process.exit(1);

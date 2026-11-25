@@ -12,13 +12,26 @@ export function clearToken() {
   if (typeof window !== "undefined") localStorage.removeItem("ls_token");
 }
 
+export function getGroqKey(): string {
+  return typeof window !== "undefined" ? (localStorage.getItem("ls_groq_key") ?? "") : "";
+}
+
+export function setGroqKey(key: string) {
+  if (typeof window !== "undefined") {
+    if (key) localStorage.setItem("ls_groq_key", key);
+    else localStorage.removeItem("ls_groq_key");
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getToken();
+  const groqKey = getGroqKey();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(init.headers as Record<string, string>),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (groqKey) headers["x-groq-key"] = groqKey;
 
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   const data = await res.json().catch(() => ({}));
@@ -97,6 +110,13 @@ export const measurementsApi = {
   delete: (id: string) => del<{ message: string }>(`/api/measurements/${id}`),
 };
 
+// ── Push notifications ────────────────────────────────────────────────────────
+export const pushApi = {
+  getVapidKey: () => get<{ publicKey: string }>("/api/push/vapid-public-key"),
+  subscribe: (sub: PushSubscriptionJSON) => post<{ ok: boolean }>("/api/push/subscribe", sub),
+  unsubscribe: (endpoint: string) => del<{ ok: boolean }>("/api/push/unsubscribe", { endpoint }),
+};
+
 // ── AI ────────────────────────────────────────────────────────────────────────
 export const aiApi = {
   chat: (messages: { role: string; content: string }[], page?: string) =>
@@ -107,6 +127,8 @@ export const aiApi = {
     post<{ plan: AiWorkoutPlan }>("/api/ai/workout-plan", { focus, equipment }),
   mealPlan: (targetCalories: number, targetProtein: number) =>
     post<{ meals: NutritionLogRes["meals"] }>("/api/ai/meal-plan", { targetCalories, targetProtein }),
+  weeklyReview: () =>
+    post<WeeklyReviewRes>("/api/ai/weekly-review", {}),
 };
 
 // ── Response types ────────────────────────────────────────────────────────────
@@ -165,6 +187,24 @@ export interface NutritionDayRes {
   date: string;
   calories: number;
   protein: number;
+}
+
+export interface WeeklyReviewRes {
+  review: {
+    weekSummary: string;
+    adjustment: {
+      direction: "increase" | "decrease" | "maintain";
+      targetCalories: number;
+      deltaCalories: number;
+      reason: string;
+    };
+    macroTargets: { protein: number; carbs: number; fat: number };
+    foodChanges: { action: "add" | "remove" | "increase" | "decrease"; food: string; detail: string }[];
+    focusNextDays: string;
+  } | null;
+  stats?: { avgCal: number; avgProtein: number; avgCarbs: number; avgFat: number; daysLogged: number; targetCal: number; tdee: number; weightDeltaKg: number | null };
+  reason?: string;
+  message?: string;
 }
 
 export interface WorkoutPayload {

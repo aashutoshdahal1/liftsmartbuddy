@@ -146,6 +146,8 @@ export interface FoodItem {
   protein: number;
   carbs: number;
   fat: number;
+  isCheatMeal?: boolean;
+  cheatMealName?: string;
 }
 
 export interface Meal {

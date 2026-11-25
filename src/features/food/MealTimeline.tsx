@@ -50,7 +50,7 @@ export function MealTimeline({ onAdd }: { onAdd: (slot: Meal["slot"]) => void })
                   <div>
                     <h3 className="font-display text-base font-semibold">{meal.slot}</h3>
                     <p className="text-xs text-muted-foreground">
-                      {meal.time} · {kcal} kcal · {protein} g protein
+                      {meal.time} · {Math.round(kcal)} kcal · {Math.round(protein * 10) / 10} g protein
                     </p>
                   </div>
                 </div>
@@ -71,9 +71,16 @@ export function MealTimeline({ onAdd }: { onAdd: (slot: Meal["slot"]) => void })
                     className="group flex items-center justify-between gap-3 rounded-2xl bg-elevated px-4 py-3"
                   >
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{item.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        {item.isCheatMeal && (
+                          <span className="shrink-0 text-[10px] font-semibold text-orange-400">
+                            🍕 Cheat{item.cheatMealName ? ` · ${item.cheatMealName}` : ""}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground">
-                        {item.serving} · P {item.protein} · C {item.carbs} · F {item.fat}
+                        {item.serving} · P {Math.round(item.protein * 10) / 10} · C {Math.round(item.carbs * 10) / 10} · F {Math.round(item.fat * 10) / 10}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">

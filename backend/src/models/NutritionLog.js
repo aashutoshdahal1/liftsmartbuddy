@@ -10,6 +10,8 @@ const foodItemSchema = new mongoose.Schema(
     carbs: { type: Number, default: 0 },
     fat: { type: Number, default: 0 },
     quantity: { type: Number, default: 1 },
+    isCheatMeal: { type: Boolean, default: false },
+    cheatMealName: { type: String, default: "" },
   },
   { _id: false }
 );
