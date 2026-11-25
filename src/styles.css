@@ -239,6 +239,14 @@
   }
 }
 
+/* Prevent iOS Safari from zooming when tapping input fields.
+   iOS zooms when font-size < 16px — this enforces the minimum. */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  input, textarea, select {
+    font-size: max(16px, 1em);
+  }
+}
+
 /* Push Sonner toasts below the iPhone notch/Dynamic Island.
    Sonner reads --mobile-offset-top on viewports ≤600px. */
 [data-sonner-toaster][data-y-position=top] {

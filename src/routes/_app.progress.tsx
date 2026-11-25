@@ -61,7 +61,7 @@ function ProgressPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="body">
+        <TabsContent value="body" className="pb-[max(7rem,calc(5rem+env(safe-area-inset-bottom)))]">
           <MeasurementsSection />
         </TabsContent>
 

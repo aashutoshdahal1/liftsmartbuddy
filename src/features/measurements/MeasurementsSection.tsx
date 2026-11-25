@@ -502,7 +502,7 @@ export function MeasurementsSection() {
             <motion.div
               initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-card p-6 pb-[max(6rem,calc(env(safe-area-inset-bottom)+5rem))]"
+              className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl bg-card p-6 pb-[max(8rem,calc(env(safe-area-inset-bottom)+7rem))]"
             >
               <div className="mx-auto mb-5 h-1 w-10 rounded-full bg-muted" />
               <div className="flex items-center justify-between mb-5">

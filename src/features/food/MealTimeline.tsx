@@ -3,6 +3,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { removeFood } from "@/store/nutritionSlice";
+import { nutritionApi } from "@/lib/api";
 import type { Meal } from "@/lib/mock-data";
 
 const slotEmoji: Record<Meal["slot"], string> = {
@@ -87,10 +88,11 @@ export function MealTimeline({ onAdd }: { onAdd: (slot: Meal["slot"]) => void })
                       <span className="text-sm font-semibold tabular-nums">{item.calories}</span>
                       <button
                         aria-label={`Remove ${item.name}`}
-                        onClick={() =>
-                          dispatch(removeFood({ mealId: meal.id, itemId: item.id }))
-                        }
-                        className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                        onClick={() => {
+                          dispatch(removeFood({ mealId: meal.id, itemId: item.id }));
+                          nutritionApi.removeFood(meal.slot, item.id).catch(() => {});
+                        }}
+                        className="text-muted-foreground transition-colors hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100"
                       >
                         <Trash2 className="size-4" />
                       </button>
