@@ -274,6 +274,15 @@ function SettingsPage() {
           <Button className="mt-5 rounded-2xl" onClick={() => toast.success("Profile saved")}>
             Save changes
           </Button>
+
+          {/* Notifications + AI Keys inline for mobile */}
+          <div className="mt-6 space-y-6 lg:hidden">
+            <div className="border-t border-border pt-6">
+              <NotificationsSection />
+            </div>
+            <AiKeysSection />
+            <TestNotificationSection />
+          </div>
         </section>
 
         <section>
@@ -291,11 +300,11 @@ function SettingsPage() {
           </div>
         </section>
 
-        <NotificationsSection />
-
-        <AiKeysSection />
-
-        <TestNotificationSection />
+        <div className="hidden lg:block space-y-6">
+          <NotificationsSection />
+          <AiKeysSection />
+          <TestNotificationSection />
+        </div>
 
         <section>
           <SectionHeader title="Subscription" />
