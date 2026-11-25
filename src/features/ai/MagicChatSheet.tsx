@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, Bot, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAppSelector } from "@/store";
@@ -218,7 +219,34 @@ export function MagicChatSheet({
                         : "bg-elevated text-foreground"
                     }`}
                   >
-                    {m.text}
+                    {m.role === "assistant" ? (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                          ul: ({ children }) => <ul className="mb-2 list-disc pl-4 space-y-0.5">{children}</ul>,
+                          ol: ({ children }) => <ol className="mb-2 list-decimal pl-4 space-y-0.5">{children}</ol>,
+                          li: ({ children }) => <li className="leading-snug">{children}</li>,
+                          strong: ({ children }) => <strong className="font-semibold text-foreground">{children}</strong>,
+                          em: ({ children }) => <em className="italic text-muted-foreground">{children}</em>,
+                          h3: ({ children }) => <h3 className="mt-3 mb-1 font-semibold text-foreground">{children}</h3>,
+                          h4: ({ children }) => <h4 className="mt-2 mb-1 font-semibold text-muted-foreground text-xs uppercase tracking-wide">{children}</h4>,
+                          table: ({ children }) => (
+                            <div className="my-2 overflow-x-auto rounded-xl border border-border/50">
+                              <table className="w-full text-xs border-collapse">{children}</table>
+                            </div>
+                          ),
+                          thead: ({ children }) => <thead className="bg-muted/50">{children}</thead>,
+                          th: ({ children }) => <th className="px-3 py-2 text-left font-semibold text-muted-foreground">{children}</th>,
+                          td: ({ children }) => <td className="px-3 py-2 border-t border-border/40">{children}</td>,
+                          code: ({ children }) => <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">{children}</code>,
+                          hr: () => <hr className="my-3 border-border/40" />,
+                        }}
+                      >
+                        {m.text}
+                      </ReactMarkdown>
+                    ) : (
+                      m.text
+                    )}
                   </div>
                 </motion.div>
               ))}

@@ -35,6 +35,7 @@ import { useAppDispatch, useAppSelector } from "@/store";
 import { awardXp, setGamification } from "@/store/gamificationSlice";
 import { addExercises, completeWorkout, resetWorkout, setNotes, startRoutine, patchExerciseTips } from "@/store/workoutSlice";
 import { workoutsApi, routinesApi, aiApi } from "@/lib/api";
+import { queueWorkout, flushQueue } from "@/lib/workoutQueue";
 
 export const Route = createFileRoute("/_app/workout")({
   head: () => ({
@@ -575,26 +576,36 @@ function WorkoutPage() {
     dispatch(completeWorkout());
     dispatch(awardXp(180));
     setDone(true);
-    // Save to backend — fire and forget, don't block UI
-    try {
-      const durationMin = startedAt ? Math.round((Date.now() - startedAt) / 60000) : 0;
-      const vol = exercises.reduce((sum, ex) =>
-        sum + ex.sets.filter((s) => s.done).reduce((s2, s) => s2 + (s.weight ?? 0) * (s.reps ?? 0), 0), 0);
-      const sets = exercises.reduce((sum, ex) => sum + ex.sets.filter((s) => s.done).length, 0);
-      const result = await workoutsApi.save({
-        title: activeRoutineTitle ?? "Workout",
-        durationMin,
-        exercises: exercises as never[],
-        notes,
-        volume: vol,
-        totalSets: sets,
-      });
-      // Sync XP + streak back from server
-      if (result.user) {
-        dispatch(setGamification({ xp: result.user.xp, xpToNext: result.user.xpToNext, level: result.user.level, streak: result.user.streak }));
+
+    const durationMin = startedAt ? Math.round((Date.now() - startedAt) / 60000) : 0;
+    const vol = exercises.reduce((sum, ex) =>
+      sum + ex.sets.filter((s) => s.done).reduce((s2, s) => s2 + (s.weight ?? 0) * (s.reps ?? 0), 0), 0);
+    const sets = exercises.reduce((sum, ex) => sum + ex.sets.filter((s) => s.done).length, 0);
+    const payload = {
+      title: activeRoutineTitle ?? "Workout",
+      durationMin,
+      exercises: exercises as never[],
+      notes,
+      volume: vol,
+      totalSets: sets,
+    };
+
+    // Always persist locally first so it survives offline
+    queueWorkout(payload);
+
+    // Try to sync immediately if online
+    if (navigator.onLine) {
+      try {
+        const { user } = await flushQueue();
+        if (user) {
+          const u = user as { xp: number; xpToNext: number; level: number; streak: number };
+          dispatch(setGamification({ xp: u.xp, xpToNext: u.xpToNext, level: u.level, streak: u.streak }));
+        }
+      } catch {
+        toast("Workout saved offline — will sync when back online", { duration: 4000 });
       }
-    } catch {
-      // Backend unavailable — local Redux state still updated
+    } else {
+      toast("You're offline — workout saved and will sync automatically", { duration: 4000 });
     }
   };
 

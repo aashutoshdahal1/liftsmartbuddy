@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { weightApi, nutritionApi, workoutsApi, measurementsApi, profileApi } from "@/lib/api";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { ACTIVE_WORKOUT_KEY } from "@/store";
@@ -10,11 +11,26 @@ import { setHistory, restoreActiveWorkout } from "@/store/workoutSlice";
 import { setRecords } from "@/store/measurementSlice";
 import { setNutritionFromLog } from "@/store/nutritionSlice";
 import { setNutritionHistory } from "@/store/nutritionHistorySlice";
+import { initOfflineSync } from "@/lib/workoutQueue";
 
 export function AppDataLoader() {
   const dispatch = useAppDispatch();
   const token = useAppSelector((s) => s.auth.token);
   const activeRoutineTitle = useAppSelector((s) => s.workout.activeRoutineTitle);
+
+  // Flush any workouts saved while offline
+  useEffect(() => {
+    if (!token) return;
+    initOfflineSync((synced, user) => {
+      toast.success(`${synced} offline workout${synced > 1 ? "s" : ""} synced`);
+      if (user) {
+        const u = user as { xp: number; xpToNext: number; level: number; streak: number };
+        dispatch(setGamification({ xp: u.xp, xpToNext: u.xpToNext, level: u.level, streak: u.streak }));
+      }
+    });
+  // runs once after login
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   // Restore active workout from localStorage on every app mount (any route)
   useEffect(() => {
