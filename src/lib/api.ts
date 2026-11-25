@@ -115,6 +115,38 @@ export const pushApi = {
   getVapidKey: () => get<{ publicKey: string }>("/api/push/vapid-public-key"),
   subscribe: (sub: PushSubscriptionJSON) => post<{ ok: boolean }>("/api/push/subscribe", sub),
   unsubscribe: (endpoint: string) => del<{ ok: boolean }>("/api/push/unsubscribe", { endpoint }),
+  updateTimes: (notifTimes: Record<string, string>) => patch<{ ok: boolean }>("/api/push/times", { notifTimes }),
+  sendTest: () => post<{ ok: boolean }>("/api/push/test", {}),
+};
+
+// ── Progress Photos ───────────────────────────────────────────────────────────
+export interface ProgressPhoto {
+  _id: string;
+  filename: string;
+  angle: "front" | "side" | "back" | "other";
+  note: string;
+  takenAt: string;
+  createdAt: string;
+}
+
+export const photosApi = {
+  list: () => get<{ photos: ProgressPhoto[] }>("/api/photos"),
+  upload: (file: File, angle: string, note: string, takenAt: string) => {
+    const form = new FormData();
+    form.append("photo", file);
+    form.append("angle", angle);
+    form.append("note", note);
+    form.append("takenAt", takenAt);
+    const token = getToken();
+    const groqKey = getGroqKey();
+    const headers: Record<string, string> = {};
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    if (groqKey) headers["x-groq-key"] = groqKey;
+    return fetch(`${BASE}/api/photos`, { method: "POST", headers, body: form })
+      .then((r) => r.json() as Promise<{ photo: ProgressPhoto }>);
+  },
+  delete: (id: string) => del<{ ok: boolean }>(`/api/photos/${id}`),
+  url: (filename: string) => `${BASE}/uploads/photos/${filename}`,
 };
 
 // ── AI ────────────────────────────────────────────────────────────────────────
@@ -129,6 +161,8 @@ export const aiApi = {
     post<{ meals: NutritionLogRes["meals"] }>("/api/ai/meal-plan", { targetCalories, targetProtein }),
   weeklyReview: () =>
     post<WeeklyReviewRes>("/api/ai/weekly-review", {}),
+  exerciseTips: (exercises: { name: string; muscle?: string; equipment?: string; sets: number; reps: number }[]) =>
+    post<{ tips: (string | null)[] }>("/api/ai/exercise-tips", { exercises }),
 };
 
 // ── Response types ────────────────────────────────────────────────────────────

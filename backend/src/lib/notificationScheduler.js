@@ -10,144 +10,105 @@ function todayStr() {
   return new Date().toISOString().slice(0, 10);
 }
 
-// Send 6 AM motivational AI notification to all subscribed users
-async function sendMorningMotivation() {
-  const subs = await PushSubscription.distinct("user");
-  for (const userId of subs) {
-    try {
-      const user = await User.findById(userId);
-      if (!user) continue;
-
-      const weights = await WeightEntry.find({ user: userId }).sort({ date: -1 }).limit(7);
-      const latestWeight = weights[0];
-      const prevWeight = weights[6];
-      const weekDelta = latestWeight && prevWeight
-        ? (latestWeight.kg - prevWeight.kg).toFixed(1)
-        : null;
-
-      const firstName = user.name?.split(" ")[0] ?? "there";
-      const hour = 6;
-      const prompt = `Generate a short (1 sentence) motivational Good morning message for ${firstName}. Goal: ${user.goal}. ${weekDelta !== null ? `Weight trend: ${weekDelta > 0 ? "+" : ""}${weekDelta}kg this week.` : ""} Be specific, energetic, under 15 words. No quotes.`;
-
-      const body = await chatCompletion(
-        [{ role: "user", content: prompt }],
-        { maxTokens: 60, temperature: 0.8 }
-      ).catch(() => `Good morning ${firstName}! Time to crush your ${user.goal} goal today.`);
-
-      await sendToUser(userId, {
-        title: "Good morning, " + firstName + "! 💪",
-        body: body.trim(),
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        tag: "morning-motivation",
-        data: { url: "/dashboard" },
-      });
-    } catch (err) {
-      console.error("[scheduler] morning motivation error for user", userId, err.message);
-    }
-  }
+async function sendMorningMotivation(userId) {
+  const user = await User.findById(userId);
+  if (!user) return;
+  const weights = await WeightEntry.find({ user: userId }).sort({ date: -1 }).limit(7);
+  const weekDelta = weights[0] && weights[6] ? (weights[0].kg - weights[6].kg).toFixed(1) : null;
+  const firstName = user.name?.split(" ")[0] ?? "there";
+  const prompt = `1 sentence motivational morning message for ${firstName}. Goal: ${user.goal}. ${weekDelta !== null ? `Weight: ${Number(weekDelta) >= 0 ? "+" : ""}${weekDelta}kg this week.` : ""} Under 15 words, no quotes.`;
+  const body = await chatCompletion(
+    [{ role: "user", content: prompt }],
+    { maxTokens: 60, temperature: 0.8 }
+  ).catch(() => `Good morning ${firstName}! Time to crush your ${user.goal} goal today.`);
+  await sendToUser(userId, {
+    title: `Good morning, ${firstName}! 💪`,
+    body: body.trim(),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: "morning-motivation",
+    data: { url: "/dashboard" },
+  });
 }
 
-// 12 PM: remind to log food if nothing logged today
-async function sendFoodReminder() {
-  const subs = await PushSubscription.distinct("user");
-  const today = todayStr();
-  for (const userId of subs) {
-    try {
-      const log = await NutritionLog.findOne({ user: userId, date: today });
-      const hasFood = log && log.meals.some((m) => m.items.length > 0);
-      if (hasFood) continue;
-
-      const user = await User.findById(userId);
-      if (!user) continue;
-      const firstName = user.name?.split(" ")[0] ?? "there";
-
-      await sendToUser(userId, {
-        title: "Log your food 🍽️",
-        body: `Hey ${firstName}, you haven't logged any food today. Keep your ${user.goal} on track!`,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        tag: "food-reminder",
-        data: { url: "/food" },
-      });
-    } catch (err) {
-      console.error("[scheduler] food reminder error", err.message);
-    }
-  }
+async function sendFoodReminder(userId) {
+  const log = await NutritionLog.findOne({ user: userId, date: todayStr() });
+  if (log && log.meals.some((m) => m.items.length > 0)) return;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const firstName = user.name?.split(" ")[0] ?? "there";
+  await sendToUser(userId, {
+    title: "Log your food 🍽️",
+    body: `Hey ${firstName}, you haven't logged any food today. Keep your ${user.goal} on track!`,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: "food-reminder",
+    data: { url: "/food" },
+  });
 }
 
-// 8 PM: remind to log workout if none today
-async function sendWorkoutReminder() {
-  const subs = await PushSubscription.distinct("user");
-  const today = todayStr();
-  for (const userId of subs) {
-    try {
-      const workout = await Workout.findOne({ user: userId, date: today });
-      if (workout) continue;
-
-      const user = await User.findById(userId);
-      if (!user) continue;
-      const firstName = user.name?.split(" ")[0] ?? "there";
-
-      await sendToUser(userId, {
-        title: "Workout logged? 🏋️",
-        body: `${firstName}, did you train today? Log it to track your progress toward your ${user.goal} goal.`,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        tag: "workout-reminder",
-        data: { url: "/workout" },
-      });
-    } catch (err) {
-      console.error("[scheduler] workout reminder error", err.message);
-    }
-  }
+async function sendWorkoutReminder(userId) {
+  const workout = await Workout.findOne({ user: userId, date: todayStr() });
+  if (workout) return;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const firstName = user.name?.split(" ")[0] ?? "there";
+  await sendToUser(userId, {
+    title: "Workout logged? 🏋️",
+    body: `${firstName}, did you train today? Log it to track your ${user.goal} progress.`,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: "workout-reminder",
+    data: { url: "/workout" },
+  });
 }
 
-// 9 PM: remind to log weight if not logged today
-async function sendWeightReminder() {
-  const subs = await PushSubscription.distinct("user");
-  const today = todayStr();
-  for (const userId of subs) {
-    try {
-      const entry = await WeightEntry.findOne({ user: userId, date: today });
-      if (entry) continue;
-
-      const user = await User.findById(userId);
-      if (!user) continue;
-      const firstName = user.name?.split(" ")[0] ?? "there";
-
-      await sendToUser(userId, {
-        title: "Log your weight ⚖️",
-        body: `${firstName}, don't forget to log your weight today — it helps LiftSmart adjust your plan.`,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        tag: "weight-reminder",
-        data: { url: "/progress" },
-      });
-    } catch (err) {
-      console.error("[scheduler] weight reminder error", err.message);
-    }
-  }
+async function sendWeightReminder(userId) {
+  const entry = await WeightEntry.findOne({ user: userId, date: todayStr() });
+  if (entry) return;
+  const user = await User.findById(userId);
+  if (!user) return;
+  const firstName = user.name?.split(" ")[0] ?? "there";
+  await sendToUser(userId, {
+    title: "Log your weight ⚖️",
+    body: `${firstName}, don't forget to log your weight — it helps LiftSmart adjust your plan.`,
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    tag: "weight-reminder",
+    data: { url: "/progress" },
+  });
 }
 
-function scheduleAt(hour, minute, fn) {
-  function next() {
-    const now = new Date();
-    const target = new Date();
-    target.setHours(hour, minute, 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
-    const delay = target - now;
-    setTimeout(() => { fn(); setInterval(fn, 24 * 60 * 60 * 1000); }, delay);
-    console.log(`[scheduler] ${fn.name} scheduled in ${Math.round(delay / 60000)} min`);
+// Run every minute, dispatch notifications to users whose scheduled time matches now
+async function tick() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, "0");
+  const mm = String(now.getMinutes()).padStart(2, "0");
+  const currentTime = `${hh}:${mm}`;
+
+  const subs = await PushSubscription.find({});
+  for (const sub of subs) {
+    const t = sub.notifTimes || {};
+    try {
+      if ((t.morning || "06:00") === currentTime) await sendMorningMotivation(sub.user);
+      if ((t.food    || "12:00") === currentTime) await sendFoodReminder(sub.user);
+      if ((t.workout || "20:00") === currentTime) await sendWorkoutReminder(sub.user);
+      if ((t.weight  || "21:00") === currentTime) await sendWeightReminder(sub.user);
+    } catch (err) {
+      console.error("[scheduler] tick error for user", sub.user, err.message);
+    }
   }
-  next();
 }
 
 function startScheduler() {
-  scheduleAt(6,  0, sendMorningMotivation);
-  scheduleAt(12, 0, sendFoodReminder);
-  scheduleAt(20, 0, sendWorkoutReminder);
-  scheduleAt(21, 0, sendWeightReminder);
+  // Align to next whole minute, then fire every 60s
+  const now = new Date();
+  const msToNextMinute = (60 - now.getSeconds()) * 1000 - now.getMilliseconds();
+  setTimeout(() => {
+    tick();
+    setInterval(tick, 60 * 1000);
+  }, msToNextMinute);
+  console.log(`[scheduler] started, first tick in ${Math.round(msToNextMinute / 1000)}s`);
 }
 
 module.exports = { startScheduler };

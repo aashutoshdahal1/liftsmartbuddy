@@ -42,11 +42,11 @@ export function FoodAiSuggestions() {
     setLoading(true);
     setError(false);
     try {
-      const [foodRes, workoutRes] = await Promise.all([
-        aiApi.suggestions("food"),
-        aiApi.suggestions("workout"),
-      ]);
+      // Stagger calls to avoid simultaneous Groq TPM rate-limit hits
+      const foodRes = await aiApi.suggestions("food");
       setFoodSuggestions(foodRes.suggestions);
+      await new Promise((r) => setTimeout(r, 1500));
+      const workoutRes = await aiApi.suggestions("workout");
       setWorkoutSuggestions(workoutRes.suggestions);
     } catch {
       setError(true);
@@ -89,39 +89,41 @@ export function FoodAiSuggestions() {
         </div>
       )}
 
-      {loading && !error && (
+      {loading && foodSuggestions.length === 0 && !error && (
         <div className="space-y-3">
-          <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
           <SkeletonCard />
         </div>
       )}
 
-      {!loading && !error && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="space-y-3"
-        >
+      {!error && (
+        <div className="space-y-3">
           {foodSuggestions.length > 0 && (
-            <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
               <SectionLabel icon={<Salad className="size-3.5" />} label="What to eat" />
               {foodSuggestions.map((s, i) => (
                 <AiRecommendationCard key={`food-${i}`} title={s.title} body={s.body} tag={s.tag} />
               ))}
-            </>
+            </motion.div>
+          )}
+
+          {loading && foodSuggestions.length > 0 && workoutSuggestions.length === 0 && (
+            <div className="space-y-3 mt-1">
+              <SkeletonCard />
+              <SkeletonCard />
+            </div>
           )}
 
           {workoutSuggestions.length > 0 && (
-            <>
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
               <SectionLabel icon={<Dumbbell className="size-3.5" />} label="Today's exercise" />
               {workoutSuggestions.map((s, i) => (
                 <AiRecommendationCard key={`workout-${i}`} title={s.title} body={s.body} tag={s.tag} />
               ))}
-            </>
+            </motion.div>
           )}
-        </motion.div>
+        </div>
       )}
       </div>
     </section>

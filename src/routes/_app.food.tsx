@@ -6,7 +6,6 @@ import { SectionHeader } from "@/components/common/SectionHeader";
 import { AppShell } from "@/components/layout/AppShell";
 import { Progress } from "@/components/ui/progress";
 import { CalorieAdjustmentBanner } from "@/features/food/CalorieAdjustmentBanner";
-import { FoodAiSuggestions } from "@/features/food/FoodAiSuggestions";
 import { FoodSearchSheet } from "@/features/food/FoodSearchSheet";
 import { MealSuggestionCard } from "@/features/food/MealSuggestionCard";
 import { MealTimeline } from "@/features/food/MealTimeline";
@@ -134,9 +133,6 @@ function FoodPage() {
 
         {/* History-based quantity adjustments */}
         <QuantitySuggestionCard />
-
-        {/* AI coach suggestions — food first, then exercise */}
-        <FoodAiSuggestions />
 
         {/* Today's timeline */}
         <section className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">

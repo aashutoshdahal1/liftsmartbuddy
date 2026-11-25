@@ -1,18 +1,17 @@
 import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { z } from "zod";
-import { Camera } from "lucide-react";
 import { CalorieChart } from "@/components/charts/CalorieChart";
 import { ConsistencyChart } from "@/components/charts/ConsistencyChart";
 import { ProteinChart } from "@/components/charts/ProteinChart";
 import { StrengthChart } from "@/components/charts/StrengthChart";
 import { VolumeChart } from "@/components/charts/VolumeChart";
 import { WeightCalendarCard, WeightTrendChart } from "@/components/charts/WeightTrendChart";
-import { EmptyState } from "@/components/common/EmptyState";
 import { SectionHeader } from "@/components/common/SectionHeader";
 import { AppShell } from "@/components/layout/AppShell";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AchievementGrid } from "@/features/gamification/AchievementGrid";
 import { MeasurementsSection } from "@/features/measurements/MeasurementsSection";
+import { ProgressPhotos } from "@/features/progress/ProgressPhotos";
 import { WorkoutHistory } from "@/features/workout/WorkoutHistory";
 
 const searchSchema = z.object({ tab: z.string().optional() });
@@ -67,12 +66,7 @@ function ProgressPage() {
         </TabsContent>
 
         <TabsContent value="photos">
-          <EmptyState
-            icon={Camera}
-            title="No progress photos yet"
-            description="Front, side and back every four weeks is the fastest way to see real change."
-            actionLabel="Add first photo"
-          />
+          <ProgressPhotos />
         </TabsContent>
 
         <TabsContent value="awards" className="space-y-4">

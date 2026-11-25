@@ -17,19 +17,53 @@ router.get("/vapid-public-key", (req, res) => {
 // POST /api/push/subscribe
 router.post("/subscribe", protect, async (req, res) => {
   try {
-    const { endpoint, keys } = req.body;
+    const { endpoint, keys, notifTimes } = req.body;
     if (!endpoint || !keys?.p256dh || !keys?.auth)
       return res.status(400).json({ message: "Invalid subscription" });
 
     await PushSubscription.findOneAndUpdate(
       { user: req.user._id, endpoint },
-      { user: req.user._id, endpoint, keys },
+      { user: req.user._id, endpoint, keys, ...(notifTimes ? { notifTimes } : {}) },
       { upsert: true, new: true }
     );
     res.json({ ok: true });
   } catch (err) {
     console.error("[push/subscribe]", err.message);
     res.status(500).json({ message: "Failed to save subscription" });
+  }
+});
+
+// PATCH /api/push/times  — update notification schedule times
+router.patch("/times", protect, async (req, res) => {
+  try {
+    const { notifTimes } = req.body;
+    await PushSubscription.updateMany(
+      { user: req.user._id },
+      { $set: { notifTimes } }
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[push/times]", err.message);
+    res.status(500).json({ message: "Failed to update times" });
+  }
+});
+
+// POST /api/push/test  — sends a real server-push notification immediately
+router.post("/test", protect, async (req, res) => {
+  try {
+    const firstName = req.user.name?.split(" ")[0] ?? "there";
+    await sendToUser(req.user._id, {
+      title: `Hey ${firstName}! 💪`,
+      body: "LiftSmart push notifications are working — even when the app is closed.",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: "test-notification",
+      data: { url: "/dashboard" },
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[push/test]", err.message);
+    res.status(500).json({ message: "Failed to send test notification" });
   }
 });
 

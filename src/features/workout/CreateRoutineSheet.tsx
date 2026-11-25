@@ -32,6 +32,7 @@ export interface RoutineExercise {
   reps: number;
   dbId?: string;
   imageUrl?: string;
+  gifUrl?: string;
   bodyPart?: string;
   equipment?: string;
   target?: string;

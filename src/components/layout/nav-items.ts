@@ -23,5 +23,5 @@ export const navItems: NavItem[] = [
 ];
 
 export const mobileNavItems = navItems.filter((n) =>
-  ["/dashboard", "/workout", "/food", "/progress", "/settings"].includes(n.to),
+  ["/dashboard", "/workout", "/food", "/progress", "/coach"].includes(n.to),
 );

@@ -30,10 +30,11 @@ import { RoutineAiPanel } from "@/features/workout/RoutineAiPanel";
 import { WorkoutCompleteDialog } from "@/features/workout/WorkoutCompleteDialog";
 import { WorkoutTimer } from "@/features/workout/WorkoutTimer";
 import { routineToExercises, buildLastSessionMap } from "@/lib/routineToExercises";
+import { fetchExercises, getImageUrl, getGifUrl } from "@/lib/exerciseDb";
 import { useAppDispatch, useAppSelector } from "@/store";
 import { awardXp, setGamification } from "@/store/gamificationSlice";
-import { addExercises, completeWorkout, resetWorkout, setNotes, startRoutine } from "@/store/workoutSlice";
-import { workoutsApi, routinesApi } from "@/lib/api";
+import { addExercises, completeWorkout, resetWorkout, setNotes, startRoutine, patchExerciseTips } from "@/store/workoutSlice";
+import { workoutsApi, routinesApi, aiApi } from "@/lib/api";
 
 export const Route = createFileRoute("/_app/workout")({
   head: () => ({
@@ -440,17 +441,36 @@ function WorkoutPage() {
 
   // Load routines from backend on mount, honouring saved sort order
   useEffect(() => {
-    routinesApi.list().then(({ routines: loaded }) => {
+    // Kick off exercise DB fetch in background so images are ready when workout starts
+    fetchExercises().catch(() => {});
+
+    routinesApi.list().then(async ({ routines: loaded }) => {
+      // Enrich with images from local exercise DB (name-matched, no extra network hop if cached)
+      let dbExercises: Awaited<ReturnType<typeof fetchExercises>> = [];
+      try { dbExercises = await fetchExercises(); } catch { /* no images if offline */ }
+      const dbByName = new Map(dbExercises.map((db) => [db.name.toLowerCase().trim(), db]));
+
       const mapped: Routine[] = loaded.map((r) => ({
         id: r._id,
         title: r.title,
-        exercises: r.exercises.map((e, i) => ({
-          id: e.id ?? `re-${i}`,
-          name: e.name,
-          sets: e.sets ?? 3,
-          reps: e.reps ?? 10,
-          ...(e.equipment ? { equipment: e.equipment } : {}),
-        })),
+        exercises: r.exercises.map((e, i) => {
+          const db = dbByName.get((e.name as string).toLowerCase().trim());
+          return {
+            id: e.id ?? `re-${i}`,
+            name: e.name,
+            sets: e.sets ?? 3,
+            reps: e.reps ?? 10,
+            ...(e.equipment ? { equipment: e.equipment } : {}),
+            ...(db ? {
+              dbId: db.id,
+              imageUrl: getImageUrl(db),
+              gifUrl: getGifUrl(db),
+              bodyPart: db.body_part,
+              target: db.target,
+              muscle_group: db.muscle_group,
+            } : {}),
+          };
+        }),
       }));
 
       // Apply localStorage order as fast-restore (backend sortOrder is the source of truth
@@ -483,15 +503,14 @@ function WorkoutPage() {
   const handleSaveRoutine = async (routine: Routine) => {
     try {
       const { routine: saved } = await routinesApi.create(routine.title, routine.exercises);
+      // Use the original routine.exercises (which have imageUrl/gifUrl from the picker)
+      // since the backend schema strips those fields.
       const mapped: Routine = {
         id: saved._id,
         title: saved.title,
-        exercises: saved.exercises.map((e, i) => ({
-          id: e.id ?? `re-${i}`,
-          name: e.name,
-          sets: e.sets ?? 3,
-          reps: e.reps ?? 10,
-          ...(e.equipment ? { equipment: e.equipment } : {}),
+        exercises: routine.exercises.map((re, i) => ({
+          ...re,
+          id: (saved.exercises[i] as { id?: string })?.id ?? re.id ?? `re-${i}`,
         })),
       };
       setRoutines((prev) => [mapped, ...prev]);
@@ -508,10 +527,48 @@ function WorkoutPage() {
     });
   };
 
-  const handleStart = (routine: Routine) => {
-    const mapped = routineToExercises(routine.exercises, lastSessionMap);
-    // startedAt is set inside startRoutine action (Redux → localStorage)
+  const handleStart = async (routine: Routine) => {
+    // Enrich exercises with imageUrl/gifUrl from the exercise DB at start time,
+    // so images are always available even if the DB hadn't loaded when routines were fetched.
+    let enriched = routine.exercises;
+    try {
+      const dbExercises = await fetchExercises();
+      const dbByName = new Map(dbExercises.map((db) => [db.name.toLowerCase().trim(), db]));
+      enriched = routine.exercises.map((re) => {
+        if (re.gifUrl) return re; // already enriched
+        const db = dbByName.get(re.name.toLowerCase().trim());
+        if (!db) return re;
+        return {
+          ...re,
+          dbId: db.id,
+          imageUrl: getImageUrl(db),
+          gifUrl: getGifUrl(db),
+          bodyPart: db.body_part,
+          target: db.target,
+          muscle_group: db.muscle_group,
+        };
+      });
+    } catch { /* start without images if DB unavailable */ }
+
+    const mapped = routineToExercises(enriched, lastSessionMap);
+    // Start the workout immediately — don't block on AI tips
     dispatch(startRoutine({ title: routine.title, exercises: mapped }));
+
+    // Fetch AI coaching cues in the background and patch them in when ready
+    aiApi.exerciseTips(
+      mapped.map((ex) => ({
+        name: ex.name,
+        muscle: ex.muscle,
+        equipment: ex.equipment,
+        sets: ex.sets.length,
+        reps: ex.sets[0]?.targetReps ?? 10,
+      }))
+    ).then(({ tips }) => {
+      const patches = mapped
+        .map((ex, i) => tips[i] ? { exerciseId: ex.id, tip: tips[i]! } : null)
+        .filter((p): p is { exerciseId: string; tip: string } => p !== null);
+      if (patches.length) dispatch(patchExerciseTips(patches));
+    }).catch(() => { /* keep static tips on failure */ });
   };
 
   const handleFinish = async () => {
@@ -714,7 +771,27 @@ function WorkoutPage() {
           </div>
         </div>
 
-        {routines.length === 0 ? (
+        {routinesLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="surface-card animate-pulse rounded-3xl p-5">
+                <div className="flex items-start gap-3">
+                  <div className="size-10 shrink-0 rounded-2xl bg-muted" />
+                  <div className="flex-1 space-y-2 pt-0.5">
+                    <div className="h-4 w-2/5 rounded bg-muted" />
+                    <div className="h-3 w-1/4 rounded bg-muted" />
+                    <div className="mt-3 flex gap-1.5">
+                      <div className="h-6 w-16 rounded-full bg-muted" />
+                      <div className="h-6 w-16 rounded-full bg-muted" />
+                      <div className="h-6 w-16 rounded-full bg-muted" />
+                    </div>
+                  </div>
+                  <div className="h-8 w-16 shrink-0 rounded-2xl bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : routines.length === 0 ? (
           <motion.button
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

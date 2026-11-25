@@ -1,6 +1,7 @@
 import { configureStore } from "@reduxjs/toolkit";
 import { useDispatch, useSelector } from "react-redux";
 import authReducer from "./authSlice";
+import foodLibraryReducer from "./foodLibrarySlice";
 import gamificationReducer from "./gamificationSlice";
 import measurementReducer from "./measurementSlice";
 import nutritionReducer from "./nutritionSlice";
@@ -14,6 +15,7 @@ const ACTIVE_WORKOUT_KEY = "ls_active_workout";
 export const store = configureStore({
   reducer: {
     auth: authReducer,
+    foodLibrary: foodLibraryReducer,
     workout: workoutReducer,
     nutrition: nutritionReducer,
     nutritionHistory: nutritionHistoryReducer,

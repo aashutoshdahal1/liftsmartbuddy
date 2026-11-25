@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, History, Sparkles, Timer } from "lucide-react";
+import { Check, History, Sparkles, Timer, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -113,7 +113,7 @@ function RestBar({ triggerKey }: { triggerKey: number }) {
 }
 
 interface ExerciseCardProps {
-  exercise: Exercise & { imageUrl?: string };
+  exercise: Exercise & { imageUrl?: string; gifUrl?: string };
   index: number;
   onSetComplete: () => void;
 }
@@ -121,9 +121,11 @@ interface ExerciseCardProps {
 export function ExerciseCard({ exercise, index, onSetComplete }: ExerciseCardProps) {
   const dispatch = useAppDispatch();
   const [showHistory, setShowHistory] = useState(false);
+  const [showMedia, setShowMedia] = useState(true);
   const [restTrigger, setRestTrigger] = useState(0);
   const doneCount = exercise.sets.filter((s) => s.done).length;
   const allDone = doneCount === exercise.sets.length;
+  const mediaSrc = exercise.gifUrl ?? exercise.imageUrl;
 
   return (
     <motion.article
@@ -135,18 +137,38 @@ export function ExerciseCard({ exercise, index, onSetComplete }: ExerciseCardPro
         allDone && "border-primary/40",
       )}
     >
-      <header className="flex items-start justify-between gap-3 p-5 pb-4">
-        {exercise.imageUrl && (
-          <div className="size-14 shrink-0 overflow-hidden rounded-xl bg-muted">
-            <img
-              src={exercise.imageUrl}
-              alt={exercise.name}
-              className="size-full object-cover"
-              loading="lazy"
-              onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none"; }}
-            />
-          </div>
+      {/* Exercise GIF / image banner */}
+      <AnimatePresence initial={false}>
+        {mediaSrc && showMedia && (
+          <motion.div
+            key="media"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25 }}
+            className="overflow-hidden"
+          >
+            <div className="relative mx-4 mt-4 overflow-hidden rounded-2xl bg-muted">
+              <img
+                src={mediaSrc}
+                alt={exercise.name}
+                className="h-28 w-full object-contain"
+                loading="lazy"
+                onError={(e) => { (e.currentTarget.parentElement as HTMLElement).style.display = "none"; }}
+              />
+              <button
+                onClick={() => setShowMedia(false)}
+                className="absolute right-2 top-2 grid size-6 place-items-center rounded-full bg-black/50 text-white hover:bg-black/70"
+                aria-label="Hide exercise demo"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      <header className="flex items-start justify-between gap-3 p-5 pb-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <h3 className="truncate font-display text-base font-semibold capitalize">{exercise.name}</h3>
@@ -165,14 +187,27 @@ export function ExerciseCard({ exercise, index, onSetComplete }: ExerciseCardPro
           </p>
           <RestBar triggerKey={restTrigger} />
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Exercise history"
-          onClick={() => setShowHistory((v) => !v)}
-        >
-          <History className="size-4" />
-        </Button>
+        <div className="flex shrink-0 items-center gap-1">
+          {mediaSrc && !showMedia && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Show exercise demo"
+              onClick={() => setShowMedia(true)}
+              className="text-muted-foreground hover:text-primary"
+            >
+              <Sparkles className="size-4" />
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Exercise history"
+            onClick={() => setShowHistory((v) => !v)}
+          >
+            <History className="size-4" />
+          </Button>
+        </div>
       </header>
 
       {showHistory ? (
@@ -186,7 +221,7 @@ export function ExerciseCard({ exercise, index, onSetComplete }: ExerciseCardPro
       ) : null}
 
       <div className="mx-5 mb-4 flex items-start gap-2.5 rounded-2xl bg-accent/10 px-4 py-3">
-        <Sparkles className="mt-0.5 size-4 shrink-0 text-accent" />
+        <Sparkles className={`mt-0.5 size-4 shrink-0 text-accent ${exercise.aiTip.startsWith("Focus on progressive overload") ? "animate-pulse" : ""}`} />
         <p className="text-xs leading-relaxed text-accent">{exercise.aiTip}</p>
       </div>
 

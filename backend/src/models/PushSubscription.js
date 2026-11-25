@@ -8,6 +8,12 @@ const pushSubscriptionSchema = new mongoose.Schema(
       p256dh: { type: String, required: true },
       auth: { type: String, required: true },
     },
+    notifTimes: {
+      morning: { type: String, default: "06:00" },
+      food:    { type: String, default: "12:00" },
+      workout: { type: String, default: "20:00" },
+      weight:  { type: String, default: "21:00" },
+    },
   },
   { timestamps: true }
 );

@@ -27,6 +27,10 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// Serve uploaded progress photos as static files
+const path = require("path");
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+
 // Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/profile", require("./routes/profile"));
@@ -37,6 +41,7 @@ app.use("/api/routines", require("./routes/routines"));
 app.use("/api/measurements", require("./routes/measurements"));
 app.use("/api/ai", require("./routes/ai"));
 app.use("/api/push", require("./routes/push").router);
+app.use("/api/photos", require("./routes/photos"));
 
 app.get("/api/health", (_, res) => res.json({ status: "ok" }));
 

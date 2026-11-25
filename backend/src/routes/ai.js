@@ -85,11 +85,15 @@ router.post("/suggestions", protect, async (req, res) => {
     const weightStr = recentWeights.map((w) => `${w.date}: ${w.kg}kg`).join(", ") || "none";
     const consumed = todayLog?.consumed ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
     const workoutStr = recentWorkouts.map((w) => `${w.date}: ${w.title}, ${w.volume}kg`).join("; ") || "none";
+    const notesStr = recentWorkouts
+      .filter((w) => w.notes && w.notes.trim())
+      .map((w) => `${w.date} (${w.title}): "${w.notes.trim()}"`)
+      .join("; ") || "none";
 
     const pagePrompts = {
-      workout: `Based on the user's recent workouts (${workoutStr}), generate 3 short, specific training suggestions. Consider muscle recovery, progression, and their goal (${req.user.goal}).`,
+      workout: `Based on the user's recent workouts (${workoutStr}) and their own session notes (${notesStr}), generate 3 short, specific training suggestions. Address any issues or feelings mentioned in the notes (e.g. tightness, fatigue, pain). Consider muscle recovery, progression, and their goal (${req.user.goal}).`,
       food: `Based on today's nutrition (calories: ${consumed.calories}, protein: ${consumed.protein}g, carbs: ${consumed.carbs}g, fat: ${consumed.fat}g) and weight trend (${weightStr}), give 3 specific food/meal suggestions to hit targets for their goal (${req.user.goal}).`,
-      progress: `Based on weight trend (${weightStr}) and workout history (${workoutStr}), give 3 insights about the user's progress toward their goal (${req.user.goal}).`,
+      progress: `Based on weight trend (${weightStr}), workout history (${workoutStr}), and session notes (${notesStr}), give 3 insights about the user's progress toward their goal (${req.user.goal}). Reference any recurring patterns from the notes.`,
     };
 
     const prompt = pagePrompts[page] || pagePrompts.workout;
@@ -131,11 +135,13 @@ router.post("/weekly-review", protect, async (req, res) => {
       WeightEntry.find({ user: req.user._id }).sort({ date: -1 }).limit(14),
     ]);
 
-    // Compute per-day totals (skip days with no log)
-    const dailyTotals = logs.map((log) => {
-      const c = log.consumed;
-      return { date: log.date, calories: c.calories, protein: c.protein, carbs: c.carbs, fat: c.fat };
-    });
+    // Compute per-day totals (skip days with no food logged or zero calories)
+    const dailyTotals = logs
+      .filter((log) => log.consumed.calories > 0)
+      .map((log) => {
+        const c = log.consumed;
+        return { date: log.date, calories: c.calories, protein: c.protein, carbs: c.carbs, fat: c.fat };
+      });
 
     const daysLogged = dailyTotals.length;
     if (daysLogged < 2) {
@@ -291,6 +297,54 @@ Return ONLY valid JSON:
     res.json(mealPlan);
   } catch (err) {
     console.error("[ai/meal-plan]", err.message);
+    res.status(500).json({ message: "AI service error" });
+  }
+});
+
+// POST /api/ai/exercise-tips  — generate one coaching cue per exercise for the active workout
+router.post("/exercise-tips", protect, async (req, res) => {
+  try {
+    const { exercises } = req.body; // [{ name, muscle, equipment, sets, reps }]
+    if (!Array.isArray(exercises) || exercises.length === 0)
+      return res.status(400).json({ message: "exercises array is required" });
+
+    const recentWorkouts = await Workout.find({ user: req.user._id }).sort({ date: -1 }).limit(5);
+    const workoutStr = recentWorkouts.length
+      ? recentWorkouts.map((w) => `${w.date}: ${w.title}, volume ${w.volume}kg`).join("; ")
+      : "none yet";
+    const recentNotes = recentWorkouts
+      .filter((w) => w.notes && w.notes.trim())
+      .map((w) => `${w.date}: "${w.notes.trim()}"`)
+      .join("; ") || "none";
+
+    const exerciseList = exercises
+      .map((e, i) => `${i + 1}. ${e.name} (${e.sets}×${e.reps}, target: ${e.muscle || "general"}, equipment: ${e.equipment || "any"})`)
+      .join("\n");
+
+    const systemPrompt = buildSystemPrompt(req.user, `Recent workouts: ${workoutStr}. Session notes: ${recentNotes}`);
+    const userPrompt = `Generate one short, specific coaching cue for each exercise below. Focus on form, mind-muscle connection, or a progressive overload tip based on the user's history. If the session notes mention issues (tightness, pain, fatigue) relevant to an exercise's muscle group, factor that in.
+
+Exercises:
+${exerciseList}
+
+Return ONLY a JSON array with exactly ${exercises.length} strings, one cue per exercise in the same order. Each cue: 1–2 sentences, under 25 words. Reply with valid JSON only, no markdown.`;
+
+    const reply = await chatCompletion([
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userPrompt },
+    ], { temperature: 0.65, maxTokens: 300, apiKey: userApiKey(req) });
+
+    let tips;
+    try {
+      tips = JSON.parse(reply);
+    } catch {
+      const match = reply.match(/\[[\s\S]*\]/);
+      tips = match ? JSON.parse(match[0]) : exercises.map(() => null);
+    }
+
+    res.json({ tips });
+  } catch (err) {
+    console.error("[ai/exercise-tips]", err.message);
     res.status(500).json({ message: "AI service error" });
   }
 });

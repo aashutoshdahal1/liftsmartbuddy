@@ -17,6 +17,7 @@ import {
 } from "@/store/profileSlice";
 import { profileApi } from "@/lib/api";
 import { logout } from "@/store/authSlice";
+import { NotificationsSection, AiKeysSection, TestNotificationSection } from "@/features/settings/SettingsSections";
 
 const GOALS: { value: FitnessGoal; label: string; desc: string; icon: typeof Target }[] = [
   { value: "lean-bulk",    label: "Lean Bulk",   desc: "Gain muscle with minimal fat",     icon: Zap },
@@ -286,6 +287,11 @@ export function ProfileSheet({ open, onClose }: { open: boolean; onClose: () => 
                     ))}
                   </div>
                 </section>
+
+                {/* Notifications, AI Keys, Test */}
+                <NotificationsSection />
+                <AiKeysSection />
+                <TestNotificationSection />
 
                 {/* Logout */}
                 <section className="pb-[max(2rem,env(safe-area-inset-bottom))]">

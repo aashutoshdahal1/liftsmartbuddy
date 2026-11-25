@@ -109,6 +109,7 @@ export function routineToExercises(
       lastSession: lastSessionLabel,
       sets,
       imageUrl: re.imageUrl,
-    } as Exercise & { imageUrl?: string };
+      gifUrl: re.gifUrl,
+    } as Exercise & { imageUrl?: string; gifUrl?: string };
   });
 }
