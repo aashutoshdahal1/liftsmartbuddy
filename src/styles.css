@@ -239,6 +239,13 @@
   }
 }
 
+/* Push Sonner toasts below the iPhone notch/Dynamic Island.
+   Sonner reads --mobile-offset-top on viewports ≤600px. */
+[data-sonner-toaster][data-y-position=top] {
+  --mobile-offset-top: max(54px, env(safe-area-inset-top, 54px));
+  --offset-top: max(54px, env(safe-area-inset-top, 54px));
+}
+
 /* Safe area for PWA on iPhone.
    34px = exact home indicator height on all modern iPhones (X/11/12/13/14/15/16). */
 .mobile-nav-safe {

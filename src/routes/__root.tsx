@@ -215,7 +215,7 @@ function RootComponent() {
       <QueryClientProvider client={queryClient}>
         <AppDataLoader />
         <Outlet />
-        <Toaster position="top-center" offset="calc(env(safe-area-inset-top) + 8px)" />
+        <Toaster position="top-center" />
       </QueryClientProvider>
     </ReduxProvider>
   );

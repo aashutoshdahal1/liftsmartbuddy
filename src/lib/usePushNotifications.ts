@@ -31,6 +31,10 @@ export function usePushNotifications() {
     navigator.serviceWorker.ready.then((reg) => {
       reg.pushManager.getSubscription().then((sub) => {
         setSubscribed(!!sub);
+        // Re-sync subscription to backend in case the DB was wiped or the record is missing
+        if (sub && navigator.onLine) {
+          pushApi.subscribe(sub.toJSON() as PushSubscriptionJSON).catch(() => {});
+        }
       });
     });
   }, [supported]);
